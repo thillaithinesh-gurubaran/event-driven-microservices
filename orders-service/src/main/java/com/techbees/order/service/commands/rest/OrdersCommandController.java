@@ -3,7 +3,12 @@ package com.techbees.order.service.commands.rest;
 import com.techbees.order.service.commands.CreateOrderCommand;
 import com.techbees.order.service.commands.OrderStatus;
 import com.techbees.order.service.model.Order;
+import com.techbees.order.service.model.OrderSummary;
+import com.techbees.order.service.query.FindOrdersQuery;
 import org.axonframework.commandhandling.gateway.CommandGateway;
+import org.axonframework.messaging.responsetypes.ResponseTypes;
+import org.axonframework.queryhandling.QueryGateway;
+import org.axonframework.queryhandling.SubscriptionQueryResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +24,14 @@ public class OrdersCommandController {
 
     private final CommandGateway commandGateway;
 
+    private final QueryGateway queryGateway;
+
     @Autowired
-    public OrdersCommandController(Environment environment, CommandGateway commandGateway) {
+    public OrdersCommandController(Environment environment,
+                                   CommandGateway commandGateway, QueryGateway queryGateway) {
         this.environment = environment;
         this.commandGateway = commandGateway;
+        this.queryGateway = queryGateway;
     }
 
     @GetMapping("/service/status")
@@ -31,7 +40,7 @@ public class OrdersCommandController {
     }
 
     @PostMapping
-    public String createOrder(@Valid @RequestBody Order order) {
+    public OrderSummary createOrder(@Valid @RequestBody Order order) {
         // Command
         String userId = "27b95829-4f3f-4ddf-8983-151ba010e35b";
         String orderId = UUID.randomUUID().toString();
@@ -40,7 +49,16 @@ public class OrdersCommandController {
                 .productId(order.getProductId()).userId(userId).quantity(order.getQuantity()).orderId(orderId)
                 .orderStatus(OrderStatus.CREATED).build();
 
-        String value = commandGateway.sendAndWait(createOrderCommand);
-        return value;
+        SubscriptionQueryResult<OrderSummary, OrderSummary> result = queryGateway.subscriptionQuery(
+                new FindOrdersQuery(orderId),
+                ResponseTypes.instanceOf(OrderSummary.class),
+                ResponseTypes.instanceOf(OrderSummary.class));
+
+        try {
+            commandGateway.sendAndWait(createOrderCommand);
+            return result.updates().blockFirst();
+        } finally {
+            result.close();
+        }
     }
 }

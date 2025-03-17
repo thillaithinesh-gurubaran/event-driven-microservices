@@ -13,6 +13,8 @@ import com.techbees.order.service.commands.RejectOrderCommand;
 import com.techbees.order.service.events.OrderApprovedEvent;
 import com.techbees.order.service.events.OrderCreatedEvent;
 import com.techbees.order.service.events.OrderRejectEvent;
+import com.techbees.order.service.model.OrderSummary;
+import com.techbees.order.service.query.FindOrdersQuery;
 import org.axonframework.commandhandling.CommandCallback;
 import org.axonframework.commandhandling.CommandMessage;
 import org.axonframework.commandhandling.CommandResultMessage;
@@ -24,6 +26,7 @@ import org.axonframework.modelling.saga.EndSaga;
 import org.axonframework.modelling.saga.SagaEventHandler;
 import org.axonframework.modelling.saga.StartSaga;
 import org.axonframework.queryhandling.QueryGateway;
+import org.axonframework.queryhandling.QueryUpdateEmitter;
 import org.axonframework.spring.stereotype.Saga;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,6 +47,9 @@ public class OrderSaga {
 
     @Autowired
     private transient DeadlineManager deadlineManager;
+
+    @Autowired
+    private transient QueryUpdateEmitter queryUpdateEmitter;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OrderSaga.class);
 
@@ -68,9 +74,13 @@ public class OrderSaga {
             public void onResult(CommandMessage<? extends ReserveProductCommand> commandMessage,
                                  CommandResultMessage<?> commandResultMessage) {
                 if (commandResultMessage.isExceptional()) {
-                    // TODO Compensation transaction
+                    // Create and send RejectOrderCommand
+                    RejectOrderCommand rejectOrderCommand = new RejectOrderCommand(
+                            orderCreatedEvent.getOrderId(),
+                            commandResultMessage.exceptionResult().getMessage());
+                    // Command gateway
+                    commandGateway.send(rejectOrderCommand);
                 }
-
             }
         });
     }
@@ -157,9 +167,9 @@ public class OrderSaga {
 
     private void cancelDeadline() {
         // Deadline - Trigger an event in certain time period to control the flow
-        if(scheduleId != null) {
+        if (scheduleId != null) {
             deadlineManager.cancelSchedule(PAYMENT_PROCESSING_TIMEOUT_DEADLINE, scheduleId);
-            scheduleId= null;
+            scheduleId = null;
         }
     }
 
@@ -178,6 +188,9 @@ public class OrderSaga {
     public void handle(OrderApprovedEvent orderApprovedEvent) {
         LOGGER.info("Order is approved, Order Saga is completed for order id : " + orderApprovedEvent.getOrderId());
         //SagaLifecycle.end();
+        queryUpdateEmitter.emit(FindOrdersQuery.class, query -> true,
+                new OrderSummary(orderApprovedEvent.getOrderId(), "",
+                        orderApprovedEvent.getOrderStatus()));
     }
 
     @EndSaga
@@ -185,6 +198,10 @@ public class OrderSaga {
     public void handle(OrderRejectEvent orderRejectEvent) {
         LOGGER.info("Order is rejected, Order id : " + orderRejectEvent.getOrderId());
         //SagaLifecycle.end();
+        queryUpdateEmitter.emit(FindOrdersQuery.class, query -> true,
+                new OrderSummary(orderRejectEvent.getOrderId(),
+                        orderRejectEvent.getReason(),
+                        orderRejectEvent.getOrderStatus()));
     }
 
     @DeadlineHandler(deadlineName = PAYMENT_PROCESSING_TIMEOUT_DEADLINE)
