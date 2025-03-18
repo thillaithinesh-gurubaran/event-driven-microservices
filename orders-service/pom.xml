@@ -51,6 +51,11 @@
 			<version>4.4.7</version>
 		</dependency>
 		<dependency>
+			<groupId>io.axoniq.console</groupId>
+			<artifactId>console-framework-client-spring-boot-starter</artifactId>
+			<version>1.9.0</version>
+		</dependency>
+		<dependency>
 			<groupId>com.google.guava</groupId>
 			<artifactId>guava</artifactId>
 			<version>30.1-jre</version>

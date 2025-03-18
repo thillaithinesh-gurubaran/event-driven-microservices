@@ -7,6 +7,7 @@ import com.techbees.product.events.ProductCreatedEvent;
 import com.techbees.product.repository.ProductRepository;
 import org.axonframework.config.ProcessingGroup;
 import org.axonframework.eventhandling.EventHandler;
+import org.axonframework.eventhandling.ResetHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeanUtils;
@@ -77,5 +78,10 @@ public class ProductEventHandler {
         productRepository.save(productEntity);
 
         LOGGER.debug("ProductReservationCancelledEvent - New Product Quantity : " + productEntity.getQuantity());
+    }
+
+    @ResetHandler
+    public void reset() {
+        productRepository.deleteAll();
     }
 }
